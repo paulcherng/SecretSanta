@@ -1,18 +1,16 @@
-// api/draw.js (使用 Nodemailer 和 Gmail 的版本)
+// api/draw.js (修改信件內容為「秘密聖誕老人」版本)
 
 import { kv } from '@vercel/kv';
-import nodemailer from 'nodemailer'; // 引入 nodemailer
+import nodemailer from 'nodemailer';
 
-// --- 以下是 Nodemailer 的設定 ---
-// 建立一個 "transporter" 物件，這是 Nodemailer 寄信的核心
-// 我們使用 Gmail 的 SMTP 服務
+// --- Nodemailer 的設定 (保持不變) ---
 const transporter = nodemailer.createTransport({
     host: 'smtp.gmail.com',
     port: 465,
-    secure: true, // true for 465, false for other ports
+    secure: true,
     auth: {
-        user: process.env.GMAIL_USER, // 從環境變數讀取你的 Gmail
-        pass: process.env.GMAIL_APP_PASSWORD, // 從環境變數讀取你的 16 位應用程式密碼
+        user: process.env.GMAIL_USER,
+        pass: process.env.GMAIL_APP_PASSWORD,
     },
 });
 
@@ -38,7 +36,6 @@ export default async function handler(request, response) {
 
         // --- 抽籤演算法 (保持不變) ---
         let assignments = null;
-        // ... (省略與之前完全相同的演算法程式碼) ...
         for (let i = 0; i < 100; i++) {
             let receivers = [...participants].sort(() => 0.5 - Math.random());
             let tempAssignments = new Map();
@@ -66,10 +63,18 @@ export default async function handler(request, response) {
             const receiver = participants.find(p => p.id === receiverId);
             
             return transporter.sendMail({
-                from: `"交換禮物小精靈" <${process.env.GMAIL_USER}>`, // 寄件人顯示名稱 + 你的Gmail
-                to: giver.email, // 收件人
-                subject: '【交換禮物】你的神秘小天使已降臨！', // 信件標題
-                html: `<p>哈囉 ${giver.name},</p><p>抽籤結果出爐啦！</p><p>你抽到的對象是：<b>${receiver.name}</b></p><p>他的願望是：</p><blockquote style="border-left: 2px solid #ccc; padding-left: 10px; margin-left: 5px;"><i>${receiver.wish}</i></blockquote><p>請開始準備你的禮物吧！</p>` // 信件內容
+                from: `"交換禮物小精靈" <${process.env.GMAIL_USER}>`,
+                to: giver.email,
+                subject: '【你的神秘聖誕任務來囉！】', // 更有趣的標題
+
+                // --- 【核心修改】更換 HTML 信件內容 ---
+                html: `<p>哈囉 ${giver.name},</p>
+                       <p>你的神秘聖誕任務來囉！</p>
+                       <p>你今年的任務，是為一位神秘的朋友準備一份禮物。這位朋友許下的願望是：</p>
+                       <blockquote style="border-left: 2px solid #ccc; padding-left: 10px; margin-left: 5px;"><i>${receiver.wish}</i></blockquote>
+                       <p>請用心準備這份禮物，並在交換禮物當天將它帶到現場。</p>
+                       <p>屆時，你就會知道這位幸運兒是誰了！🤫</p>
+                       <p>祝你準備順利，聖誕快樂！</p>`
             });
         });
 
