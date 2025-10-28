@@ -102,12 +102,23 @@
             }
         });
         
+        // 在 index.html 的 <script> 標籤中，找到 updateStatus 函式並替換成以下內容
+
         async function updateStatus() {
             try {
                 const response = await fetch('/api/status');
                 if (!response.ok) throw new Error('無法取得伺服器狀態');
+                
                 const result = await response.json();
-                statusText.textContent = `已填寫人數: ${result.count} / 8`;
+                
+                if (result.count >= 8) {
+                    statusText.textContent = '所有人都已完成填寫，請靜候主辦方執行抽籤！';
+                    // 隱藏表單，因為已經滿了
+                    form.style.display = 'none'; 
+                    showMessage('感謝您的參與，目前名額已滿。', 'success');
+                } else {
+                    statusText.textContent = `已填寫人數: ${result.count} / 8`;
+                }
             } catch (error) {
                  statusText.textContent = '無法取得目前狀態。';
             }
