@@ -85,13 +85,19 @@
             width: 100%;
             padding: 12px;
             box-sizing: border-box;
-            background-color: rgba(0, 0, 0, 0.2);
+            background-color: rgba(0, 0, 0, 0.3); /* 讓背景稍微深一點點 */
             border: 1px solid #4a5a75;
             border-radius: 8px;
-            color: #f0f0f0;
+            color: #f0f0f0; /* 確保未選中時的文字是亮的 */
             font-family: 'Nunito', sans-serif;
             font-size: 1em;
             transition: border-color 0.3s, box-shadow 0.3s;
+        }
+        
+        /* --- 新增這段來處理禁用選項的樣式 --- */
+        select option:disabled {
+            color: #777; /* 讓已額滿的選項呈現灰色 */
+            background-color: #222; /* 給一個稍深一點的背景以示區別 */
         }
 
         input:focus, select:focus, textarea:focus {
@@ -99,7 +105,12 @@
             border-color: #28a745; /* 聖誕綠 */
             box-shadow: 0 0 10px rgba(40, 167, 69, 0.5);
         }
-
+        /* --- 新增這段來美化下拉選項 --- */
+        select option {
+            background-color: #0d1a2f; /* 與 body 背景色一致的深藍色 */
+            color: #f0f0f0; /* 明亮的文字顏色 */
+            padding: 10px; /* 增加一點內距，讓選項更開闊 */
+        }
         /* --- 按鈕美化與動畫 --- */
         button {
             width: 100%;
