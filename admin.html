@@ -67,25 +67,51 @@
             return response;
         }
 
+        // 在 admin.html 的 <script> 標籤中，找到 loadStatus 函式並整個替換掉
+
         async function loadStatus() {
+            // 建立一個 組別ID -> 組別名稱 的對照表
+            const groupMap = {
+                1: '光佑',
+                2: 'Jefferson',
+                3: 'PJ一家',
+                4: '瑞君一家',
+                5: '豪哥一家'
+            };
+        
             try {
-                const response = await apiFetch('/api/status'); // 需要一個新的 status API
+                const response = await apiFetch('/api/status');
                 if (!response.ok) throw new Error('無法載入資料');
                 
                 const data = await response.json();
                 loginSection.style.display = 'none';
                 adminPanel.style.display = 'block';
                 messageArea.innerHTML = '';
-
+        
                 statusText.textContent = `人數: ${data.count} / 8`;
                 
-                let html = '<table><tr><th>ID</th><th>名字</th><th>Email</th><th>組別</th><th>抽給誰(ID)</th></tr>';
-                data.participants.forEach(p => {
-                    html += `<tr><td>${p.id}</td><td>${p.name}</td><td>${p.email}</td><td>${p.group_id}</td><td>${p.assigned_to || 'N/A'}</td></tr>`;
+                // 建立新的表格標頭
+                let html = '<table><tr><th>ID</th><th>名字</th><th>Email</th><th>組別</th><th>許願內容</th><th>抽到誰(ID)</th><th>對方的願望</th></tr>';
+                
+                const participants = data.participants;
+        
+                participants.forEach(p => {
+                    // 查找抽到的對象
+                    const target = p.assigned_to ? participants.find(targetPerson => targetPerson.id === p.assigned_to) : null;
+                    
+                    html += `<tr>
+                        <td>${p.id}</td>
+                        <td>${p.name}</td>
+                        <td>${p.email}</td>
+                        <td>${groupMap[p.group_id] || '未知'}</td>
+                        <td style="max-width: 200px; word-wrap: break-word;">${p.wish}</td>
+                        <td>${p.assigned_to || 'N/A'}</td>
+                        <td style="max-width: 200px; word-wrap: break-word;">${target ? target.wish : 'N/A'}</td>
+                    </tr>`;
                 });
                 html += '</table>';
                 participantsTable.innerHTML = html;
-
+        
                 if (data.draw_completed) {
                     drawButton.disabled = true;
                     drawButton.textContent = '抽籤已完成';
