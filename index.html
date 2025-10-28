@@ -2,58 +2,202 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <title>交換禮物抽籤系統</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>聖誕交換禮物抽籤系統</title>
+    
+    <!-- 引入 Google Fonts 的節慶字體 -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Mountains+of+Christmas:wght@700&family=Nunito:wght@400;700&display=swap" rel="stylesheet">
+
     <style>
-        body { font-family: sans-serif; max-width: 600px; margin: 40px auto; padding: 0 20px; }
+        /* --- 整體與背景設定 --- */
+        body {
+            margin: 0;
+            padding: 40px 20px;
+            background-color: #0d1a2f; /* 深藍色夜空 */
+            background-image: 
+                radial-gradient(circle at 20% 20%, rgba(255, 255, 255, 0.1), transparent 20%),
+                radial-gradient(circle at 80% 60%, rgba(255, 255, 255, 0.05), transparent 15%);
+            font-family: 'Nunito', sans-serif; /* 圓體字，更柔和 */
+            color: #f0f0f0;
+            overflow-x: hidden; /* 避免雪花產生橫向滾動條 */
+        }
+
+        /* --- 雪花動畫 --- */
+        #snow-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            pointer-events: none;
+            z-index: -1;
+        }
+
+        .snowflake {
+            position: absolute;
+            background: white;
+            border-radius: 50%;
+            opacity: 0.8;
+            animation: fall linear infinite;
+        }
+
+        @keyframes fall {
+            0% { transform: translateY(-10vh); }
+            100% { transform: translateY(110vh); }
+        }
+
+        /* --- 主要內容容器 (卡片式設計) --- */
+        .container {
+            max-width: 500px;
+            margin: 0 auto;
+            background: rgba(18, 35, 61, 0.8); /* 半透明深色背景 */
+            padding: 30px 40px;
+            border-radius: 15px;
+            border: 1px solid rgba(255, 215, 0, 0.3); /* 金色邊框 */
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+            backdrop-filter: blur(5px);
+        }
+
+        /* --- 標題設計 --- */
+        h1 {
+            font-family: 'Mountains of Christmas', cursive; /* 聖誕藝術字體 */
+            color: #FFD700; /* 金色 */
+            font-size: 3.5em;
+            text-align: center;
+            margin-bottom: 20px;
+            text-shadow: 0 0 5px #ffd700, 0 0 15px #c12a2a;
+        }
+
+        /* --- 表單元素美化 --- */
         fieldset { border: none; padding: 0; margin: 0; }
-        .form-group { margin-bottom: 15px; }
-        label { display: block; margin-bottom: 5px; font-weight: bold; }
-        input, select, textarea { width: 100%; padding: 8px; box-sizing: border-box; }
-        button { padding: 10px 20px; cursor: pointer; }
-        button:disabled { background-color: #ccc; cursor: not-allowed; }
-        #status-container { margin-top: 20px; background-color: #f0f0f0; padding: 15px; border-radius: 5px; }
-        .message { padding: 10px; margin-top: 15px; border-radius: 5px; display: none; }
-        .message.success { background-color: #d4edda; color: #155724; }
-        .message.error { background-color: #f8d7da; color: #721c24; }
+        .form-group { margin-bottom: 20px; }
+        
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: bold;
+            color: #b0c4de; /* 淡藍鋼色 */
+        }
+
+        input, select, textarea {
+            width: 100%;
+            padding: 12px;
+            box-sizing: border-box;
+            background-color: rgba(0, 0, 0, 0.2);
+            border: 1px solid #4a5a75;
+            border-radius: 8px;
+            color: #f0f0f0;
+            font-family: 'Nunito', sans-serif;
+            font-size: 1em;
+            transition: border-color 0.3s, box-shadow 0.3s;
+        }
+
+        input:focus, select:focus, textarea:focus {
+            outline: none;
+            border-color: #28a745; /* 聖誕綠 */
+            box-shadow: 0 0 10px rgba(40, 167, 69, 0.5);
+        }
+
+        /* --- 按鈕美化與動畫 --- */
+        button {
+            width: 100%;
+            padding: 15px 20px;
+            cursor: pointer;
+            background-color: #c12a2a; /* 聖誕紅 */
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 1.2em;
+            font-weight: bold;
+            font-family: 'Nunito', sans-serif;
+            transition: transform 0.2s ease-out, background-color 0.2s;
+            box-shadow: 0 4px 15px rgba(193, 42, 42, 0.4);
+        }
+
+        button:hover:not(:disabled) {
+            transform: translateY(-3px);
+            background-color: #e04444;
+        }
+
+        button:disabled {
+            background-color: #555;
+            cursor: not-allowed;
+            box-shadow: none;
+        }
+
+        /* --- 狀態與訊息區域 --- */
+        #status-container {
+            margin-top: 30px;
+            background-color: rgba(0, 0, 0, 0.2);
+            padding: 20px;
+            border-radius: 8px;
+            text-align: center;
+        }
+        #status-container h3 {
+            margin: 0 0 10px 0;
+            color: #FFD700;
+        }
+        #status-text {
+            font-size: 1.1em;
+            margin: 0;
+        }
+
+        .message {
+            padding: 12px;
+            margin-bottom: 20px;
+            border-radius: 8px;
+            display: none;
+            text-align: center;
+        }
+        .message.success { background-color: #1e4620; color: #a3d9a5; }
+        .message.error { background-color: #5e1c20; color: #f5c6cb; }
     </style>
 </head>
 <body>
-    <h1>交換禮物抽籤系統</h1>
 
-    <div id="message-area" class="message"></div>
+    <!-- 雪花動畫的容器 -->
+    <div id="snow-container"></div>
 
-    <form id="wishForm">
-        <fieldset id="form-fieldset">
-            <div class="form-group">
-                <label for="name">你的名字:</label>
-                <input type="text" id="name" required>
-            </div>
-            <div class="form-group">
-                <label for="email">你的 Email:</label>
-                <input type="email" id="email" required>
-            </div>
-           <div class="form-group">
-                <label for="group">選擇你的組別/家庭:</label>
-                <select id="group" required>
-                    <option value="">--請選擇--</option>
-                    <option value="1">光佑</option>
-                    <option value="2">Jefferson</option>
-                    <option value="3">PJ一家</option>
-                    <option value="4">瑞君一家</option>
-                    <option value="5">豪哥一家</option>
-                </select>
-            </div>
-            <div class="form-group">
-                <label for="wish">你的願望 (限100字):</label>
-                <textarea id="wish" rows="3" maxlength="100" required></textarea> 
-            </div>
-            <button type="submit">提交願望</button>
-        </fieldset>
-    </form>
-    
-    <div id="status-container">
-        <h3>目前進度</h3>
-        <p id="status-text">正在載入狀態...</p>
+    <div class="container">
+        <h1>Secret Santa</h1>
+
+        <div id="message-area" class="message"></div>
+
+        <form id="wishForm">
+            <fieldset id="form-fieldset">
+                <div class="form-group">
+                    <label for="name">你的名字:</label>
+                    <input type="text" id="name" required>
+                </div>
+                <div class="form-group">
+                    <label for="email">你的 Email:</label>
+                    <input type="email" id="email" required>
+                </div>
+                <div class="form-group">
+                    <label for="group">選擇你的組別/家庭:</label>
+                    <select id="group" required>
+                        <option value="">--請選擇--</option>
+                        <option value="1">光佑</option>
+                        <option value="2">Jefferson</option>
+                        <option value="3">PJ一家</option>
+                        <option value="4">瑞君一家</option>
+                        <option value="5">豪哥一家</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="wish">你的願望 (限100字):</label>
+                    <textarea id="wish" rows="3" maxlength="100" required></textarea>
+                </div>
+                <button type="submit">提交我的願望</button>
+            </fieldset>
+        </form>
+        
+        <div id="status-container">
+            <h3>目前進度</h3>
+            <p id="status-text">正在載入狀態...</p>
+        </div>
     </div>
 
     <script>
@@ -62,6 +206,28 @@
         const statusText = document.getElementById('status-text');
         const messageArea = document.getElementById('message-area');
 
+        // --- 雪花動畫的 JavaScript ---
+        document.addEventListener('DOMContentLoaded', () => {
+            const snowContainer = document.getElementById('snow-container');
+            const snowflakeCount = 100;
+
+            for (let i = 0; i < snowflakeCount; i++) {
+                const snowflake = document.createElement('div');
+                snowflake.classList.add('snowflake');
+                
+                const size = (Math.random() * 4) + 1 + 'px';
+                snowflake.style.width = size;
+                snowflake.style.height = size;
+                
+                snowflake.style.left = Math.random() * 100 + 'vw';
+                snowflake.style.animationDuration = (Math.random() * 5) + 5 + 's'; // 5-10秒
+                snowflake.style.animationDelay = Math.random() * 5 + 's';
+                
+                snowContainer.appendChild(snowflake);
+            }
+        });
+
+        // --- 表單功能 (與之前相同，但整合了新版面) ---
         function showMessage(text, type = 'error') {
             messageArea.textContent = text;
             messageArea.className = `message ${type}`;
@@ -70,7 +236,7 @@
 
         form.addEventListener('submit', async (e) => {
             e.preventDefault();
-            fieldset.disabled = true; // 鎖定整個表單
+            fieldset.disabled = true;
             messageArea.style.display = 'none';
 
             const data = {
@@ -92,28 +258,24 @@
                     throw new Error(result.message || '提交失敗，請稍後再試。');
                 }
 
-                showMessage('提交成功！感謝您的參與。', 'success');
+                showMessage('提交成功！感謝您的參與，聖誕快樂！', 'success');
                 form.reset();
                 updateStatus();
             } catch (error) {
                 showMessage(`錯誤: ${error.message}`);
             } finally {
-                fieldset.disabled = false; // 解鎖表單
+                fieldset.disabled = false;
             }
         });
         
-        // 在 index.html 的 <script> 標籤中，找到 updateStatus 函式並替換成以下內容
-
         async function updateStatus() {
             try {
                 const response = await fetch('/api/status');
                 if (!response.ok) throw new Error('無法取得伺服器狀態');
-                
                 const result = await response.json();
-                
+
                 if (result.count >= 8) {
                     statusText.textContent = '所有人都已完成填寫，請靜候主辦方執行抽籤！';
-                    // 隱藏表單，因為已經滿了
                     form.style.display = 'none'; 
                     showMessage('感謝您的參與，目前名額已滿。', 'success');
                 } else {
