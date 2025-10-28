@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <title>交換禮物抽籤系統</title>
+    <style>
+        body { font-family: sans-serif; max-width: 600px; margin: 40px auto; }
+        .form-group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; }
+        input, select, textarea { width: 100%; padding: 8px; }
+        button { padding: 10px 20px; }
+        #status { margin-top: 20px; background-color: #f0f0f0; padding: 10px; }
+    </style>
+</head>
+<body>
+    <h1>交換禮物抽籤系統</h1>
+    <form id="wishForm">
+        <div class="form-group">
+            <label for="name">你的名字:</label>
+            <input type="text" id="name" required>
+        </div>
+        <div class="form-group">
+            <label for="email">你的 Email:</label>
+            <input type="email" id="email" required>
+        </div>
+        <div class="form-group">
+            <label for="group">選擇你的組別:</label>
+            <select id="group" required>
+                <option value="">--請選擇--</option>
+                <option value="1">第一組 (1人)</option>
+                <option value="2">第二組 (1人)</option>
+                <option value="3">第三組 (2人)</option>
+                <option value="4">第四組 (2人)</option>
+                <option value="5">第五組 (2人)</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="wish">你的願望:</label>
+            <textarea id="wish" rows="4" required></textarea>
+        </div>
+        <button type="submit">提交願望</button>
+    </form>
+    <div id="status">正在載入目前狀態...</div>
+
+    <script>
+        const form = document.getElementById('wishForm');
+        const statusDiv = document.getElementById('status');
+
+        // 提交表單的處理函式
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const submitButton = form.querySelector('button');
+            submitButton.disabled = true;
+            submitButton.textContent = '提交中...';
+
+            const data = {
+                name: document.getElementById('name').value,
+                email: document.getElementById('email').value,
+                group_id: parseInt(document.getElementById('group').value),
+                wish: document.getElementById('wish').value,
+            };
+
+            try {
+                // 這個 /api/submit 就是我們的 Serverless Function
+                const response = await fetch('/api/submit', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data),
+                });
+                const result = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(result.message || '提交失敗');
+                }
+
+                alert('提交成功！');
+                form.reset();
+                updateStatus(); // 更新目前進度
+            } catch (error) {
+                alert(`錯誤: ${error.message}`);
+            } finally {
+                submitButton.disabled = false;
+                submitButton.textContent = '提交願望';
+            }
+        });
+        
+        // 頁面載入時，取得目前狀態
+        async function updateStatus() {
+            try {
+                // 這個 /api/status 也是一個 Serverless Function
+                const response = await fetch('/api/status');
+                const result = await response.json();
+                statusDiv.innerHTML = `<h3>目前進度</h3><p>已填寫人數: ${result.count} / 8</p>`;
+            } catch (error) {
+                 statusDiv.textContent = '無法取得狀態。';
+            }
+        }
+
+        updateStatus(); // 立即執行一次
+    </script>
+</body>
+</html>
