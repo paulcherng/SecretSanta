@@ -1,77 +1,90 @@
+// api/draw.js
 import { kv } from '@vercel/kv';
-// 引入你的郵件服務 SDK，例如 Resend
 import { Resend } from 'resend';
 
-// 從環境變數讀取你的 API Key
 const resend = new Resend(process.env.RESEND_API_KEY);
+const TOTAL_PARTICIPANTS = 8;
 
 export default async function handler(request, response) {
-    // 簡單的密碼保護，防止任何人隨意觸發
-    const { secret } = request.query;
-    if (secret !== process.env.ADMIN_SECRET) {
+    // 1. 安全驗證
+    const secret = request.headers.authorization?.split(' ')[1]; // 從 Header 讀取
+    if (request.method !== 'POST' || secret !== process.env.ADMIN_SECRET) {
         return response.status(401).json({ message: '未授權' });
     }
 
-    let participants = await kv.get('participants');
+    try {
+        let data = await kv.get('participants') || [];
+        // 在 KV 中，我們將參與者陣列和狀態旗標存在同一個 key
+        const participants = Array.isArray(data) ? data : data.participants;
+        const isDrawn = Array.isArray(data) ? false : data.draw_completed;
 
-    if (!participants || participants.length < 8) {
-        return response.status(400).json({ message: '人數尚未到齊，無法抽籤！' });
-    }
+        // 2. 檢查狀態，防止重複抽籤
+        if (isDrawn) {
+            return response.status(400).json({ message: '抽籤已經完成過了，不可重複執行。' });
+        }
+        if (!participants || participants.length < TOTAL_PARTICIPANTS) {
+            return response.status(400).json({ message: `人數尚未到齊 (${participants.length}/${TOTAL_PARTICIPANTS})，無法抽籤！` });
+        }
 
-    // --- 核心抽籤演算法 ---
-    let result = null;
-    let attempts = 0;
-    while (attempts < 100) { // 防止無限迴圈
-        let givers = [...participants];
-        let receivers = [...participants].sort(() => Math.random() - 0.5); // 隨機打亂
-        
-        let valid = true;
-        let assignments = new Map();
-        for (let i = 0; i < givers.length; i++) {
-            const giver = givers[i];
-            const receiver = receivers[i];
-            // 條件：不能抽到自己 或 不能抽到同組
-            if (giver.id === receiver.id || giver.group_id === receiver.group_id) {
-                valid = false;
+        // 3. 核心抽籤演算法 (與之前相同，但更健壯)
+        let assignments = null;
+        for (let i = 0; i < 100; i++) { // 最多嘗試100次
+            let receivers = [...participants].sort(() => 0.5 - Math.random());
+            let tempAssignments = new Map();
+            let isValid = true;
+            for (let j = 0; j < participants.length; j++) {
+                const giver = participants[j];
+                const receiver = receivers[j];
+                if (giver.id === receiver.id || giver.group_id === receiver.group_id) {
+                    isValid = false;
+                    break;
+                }
+                tempAssignments.set(giver.id, receiver.id);
+            }
+            if (isValid) {
+                assignments = tempAssignments;
                 break;
             }
-            assignments.set(giver.id, receiver.id);
         }
 
-        if (valid) {
-            result = assignments;
-            break;
+        if (!assignments) {
+            return response.status(500).json({ message: '抽籤演算法在100次嘗試後仍未找到有效組合。' });
         }
-        attempts++;
-    }
 
-    if (!result) {
-        return response.status(500).json({ message: '抽籤失敗，無法在 100 次嘗試中找到有效組合。' });
-    }
-
-    // --- 抽籤成功，開始寄信 ---
-    try {
-        for (const [giverId, receiverId] of result.entries()) {
-            const giver = participants.find(p => p.id === giverId);
+        // 4. 並行寄送郵件 (預防 FUNCTION_INVOCATION_TIMEOUT)
+        const emailPromises = participants.map(giver => {
+            const receiverId = assignments.get(giver.id);
             const receiver = participants.find(p => p.id === receiverId);
-
-            await resend.emails.send({
-                from: '抽籤系統 <no-reply@yourdomain.com>',
+            
+            return resend.emails.send({
+                from: '交換禮物小精靈 <no-reply@yourdomain.com>', // 替換成你自己的域名
                 to: giver.email,
-                subject: '【交換禮物】抽籤結果出爐！',
-                html: `<p>哈囉 ${giver.name},</p>
-                       <p>你抽到的對象是：<b>${receiver.name}</b></p>
-                       <p>他的願望是：</p>
-                       <p><i>${receiver.wish}</i></p>
-                       <p>請開始準備你的禮物吧！</p>`
+                subject: '【交換禮物】你的神秘小天使已降臨！',
+                html: `<p>哈囉 ${giver.name},</p><p>抽籤結果出爐啦！</p><p>你抽到的對象是：<b>${receiver.name}</b></p><p>他的願望是：</p><blockquote style="border-left: 2px solid #ccc; padding-left: 10px; margin-left: 5px;"><i>${receiver.wish}</i></blockquote><p>請開始準備你的禮物吧！</p>`
             });
-        }
-        
-        // (可選) 清空資料，準備下次使用
-        // await kv.del('participants');
+        });
 
-        return response.status(200).json({ message: '抽籤完成，且信件已全數寄出！' });
+        const results = await Promise.allSettled(emailPromises);
+        const successfulEmails = results.filter(r => r.status === 'fulfilled').length;
+        const failedEmails = results.filter(r => r.status === 'rejected').length;
+
+        // 5. 標記抽籤已完成並儲存結果
+        const finalData = {
+            draw_completed: true,
+            participants: participants.map(p => ({
+                ...p,
+                assigned_to: assignments.get(p.id)
+            }))
+        };
+        await kv.set('participants', finalData);
+        
+        return response.status(200).json({ 
+            message: `抽籤完成！成功寄出 ${successfulEmails} 封信，失敗 ${failedEmails} 封。`,
+            details: results 
+        });
+
     } catch (error) {
-        return response.status(500).json({ message: '信件寄送失敗', error: error.message });
+        console.error('Draw API Error:', error);
+        return response.status(500).json({ message: '伺服器內部發生未知錯誤。', error: error.message });
     }
 }
