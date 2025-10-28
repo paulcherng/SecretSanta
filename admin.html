@@ -1,20 +1,49 @@
-<!-- admin.html -->
 <!DOCTYPE html>
-<html>
+<html lang="zh-TW">
 <head>
+    <meta charset="UTF-8">
     <title>抽籤後台</title>
+    <style>
+        body { font-family: sans-serif; max-width: 800px; margin: 40px auto; padding: 0 20px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th { background-color: #f2f2f2; }
+        button:disabled { background-color: #ccc; cursor: not-allowed; }
+        .message { padding: 10px; margin-top: 15px; border-radius: 5px; }
+        .message.success { background-color: #d4edda; color: #155724; }
+        .message.error { background-color: #f8d7da; color: #721c24; }
+    </style>
 </head>
 <body>
     <h1>後台管理</h1>
-    <div id="content">
+    <div id="login-section">
         <label for="secret">請輸入管理密碼:</label>
         <input type="password" id="secret">
         <button onclick="login()">登入</button>
     </div>
 
+    <div id="admin-panel" style="display:none;">
+        <div id="message-area"></div>
+        <h2>目前參與者列表</h2>
+        <p id="status-text"></p>
+        <div id="participants-table"></div>
+        <br>
+        <button id="draw-button" onclick="startDraw()">執行抽籤</button>
+        <button onclick="loadStatus()">重新整理</button>
+    </div>
+
     <script>
-        const contentDiv = document.getElementById('content');
+        const loginSection = document.getElementById('login-section');
+        const adminPanel = document.getElementById('admin-panel');
+        const messageArea = document.getElementById('message-area');
+        const statusText = document.getElementById('status-text');
+        const participantsTable = document.getElementById('participants-table');
+        const drawButton = document.getElementById('draw-button');
         let adminSecret = '';
+
+        function showMessage(text, type = 'error') {
+            messageArea.innerHTML = `<div class="message ${type}">${text}</div>`;
+        }
 
         function login() {
             adminSecret = document.getElementById('secret').value;
@@ -25,57 +54,76 @@
             loadStatus();
         }
 
-        async function loadStatus() {
-            // 使用 GET /api/status?secret=密碼 來取得受保護的資料
-            const response = await fetch(`/api/status?secret=${adminSecret}`);
-            if (!response.ok) {
-                alert('密碼錯誤或無法取得資料');
-                return;
+        async function apiFetch(url, options = {}) {
+            const headers = {
+                'Content-Type': 'application/json',
+                ...options.headers,
+                'Authorization': `Bearer ${adminSecret}` // 將密碼放在 Header
+            };
+            const response = await fetch(url, { ...options, headers });
+            if (response.status === 401) {
+                throw new Error('密碼錯誤或憑證已過期。');
             }
-            const data = await response.json();
-            
-            let html = '<h2>目前參與者列表</h2>';
-            html += `<p>人數: ${data.count} / 8</p>`;
-            html += '<table border="1" cellpadding="5"><tr><th>ID</th><th>名字</th><th>Email</th><th>組別</th><th>願望</th></tr>';
-            data.participants.forEach(p => {
-                html += `<tr><td>${p.id}</td><td>${p.name}</td><td>${p.email}</td><td>${p.group_id}</td><td>${p.wish}</td></tr>`;
-            });
-            html += '</table>';
-            html += '<br><button onclick="startDraw()">開始抽籤</button>';
-            
-            contentDiv.innerHTML = html;
+            return response;
+        }
+
+        async function loadStatus() {
+            try {
+                const response = await apiFetch('/api/status'); // 需要一個新的 status API
+                if (!response.ok) throw new Error('無法載入資料');
+                
+                const data = await response.json();
+                loginSection.style.display = 'none';
+                adminPanel.style.display = 'block';
+                messageArea.innerHTML = '';
+
+                statusText.textContent = `人數: ${data.count} / 8`;
+                
+                let html = '<table><tr><th>ID</th><th>名字</th><th>Email</th><th>組別</th><th>抽給誰(ID)</th></tr>';
+                data.participants.forEach(p => {
+                    html += `<tr><td>${p.id}</td><td>${p.name}</td><td>${p.email}</td><td>${p.group_id}</td><td>${p.assigned_to || 'N/A'}</td></tr>`;
+                });
+                html += '</table>';
+                participantsTable.innerHTML = html;
+
+                if (data.draw_completed) {
+                    drawButton.disabled = true;
+                    drawButton.textContent = '抽籤已完成';
+                    showMessage('抽籤已完成。結果如上表所示。', 'success');
+                } else if (data.count < 8) {
+                    drawButton.disabled = true;
+                    drawButton.textContent = '人數未滿';
+                } else {
+                    drawButton.disabled = false;
+                    drawButton.textContent = '執行抽籤';
+                }
+            } catch (error) {
+                alert(error.message);
+                adminSecret = '';
+            }
         }
 
         async function startDraw() {
             if (!confirm('確定要執行抽籤嗎？此動作無法復原！')) return;
             
-            const button = contentDiv.querySelector('button');
-            button.disabled = true;
-            button.textContent = '抽籤中...';
+            drawButton.disabled = true;
+            drawButton.textContent = '抽籤與寄信中...';
+            showMessage('正在執行中，請勿關閉視窗...', 'info');
 
-            // 呼叫抽籤 API
-            const response = await fetch(`/api/draw?secret=${adminSecret}`, { method: 'POST' });
-            const result = await response.json();
+            try {
+                const response = await apiFetch('/api/draw', { method: 'POST' });
+                const result = await response.json();
 
-            alert(result.message);
-            button.disabled = false;
-            button.textContent = '開始抽籤';
+                if (!response.ok) throw new Error(result.message);
+
+                showMessage(result.message, 'success');
+                loadStatus(); // 重新載入以顯示結果
+            } catch (error) {
+                showMessage(error.message, 'error');
+                drawButton.disabled = false;
+                drawButton.textContent = '執行抽籤';
+            }
         }
     </script>
 </body>
 </html>
-```你需要再額外建立一個 `api/status.js` 來提供後台頁面所需的資料。
-
-### 如何發布？
-
-1.  **註冊帳號:** 註冊一個 [Vercel](https://vercel.com) 和一個 [GitHub](https://github.com) 帳號。
-2.  **建立專案:** 將以上這些檔案 (html, api/*.js) 放到一個資料夾。
-3.  **上傳到 GitHub:** 將這個資料夾變成一個 GitHub Repository。
-4.  **連結 Vercel:** 在 Vercel 上，選擇 "Import Project"，然後選擇你剛剛建立的 GitHub Repository。
-5.  **設定環境變數:** 在 Vercel 專案的設定中，找到 "Environment Variables"，然後加入：
-    *   `RESEND_API_KEY`: 你的 Resend API 金鑰。
-    *   `ADMIN_SECRET`: 你自訂的管理員後台密碼。
-6.  **設定儲存:** 在 Vercel 專案的 "Storage" 標籤頁，建立一個 KV Database 並連結到你的專案。
-7.  **部署:** Vercel 會自動偵測到你的專案結構並部署。完成後，你就會得到一個公開的網址！
-
-這個方案完美地繞過了自己管理伺服器和資料庫的麻煩，同時功能完整、安全，且在你的使用規模下是免費的。
