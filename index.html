@@ -211,15 +211,14 @@
         </div>
     </div>
 
-  // index.html 的 <script> 區塊 (修正版)
-
-<script>
+   <script>
     const form = document.getElementById('wishForm');
     const fieldset = document.getElementById('form-fieldset');
     const statusText = document.getElementById('status-text');
     const messageArea = document.getElementById('message-area');
     const groupSelect = document.getElementById('group');
 
+    // 將組別的靜態資訊定義在前端，方便管理
     const GROUP_CONFIG = {
         '1': { name: '光佑', limit: 1 },
         '2': { name: 'Jefferson', limit: 1 },
@@ -228,10 +227,10 @@
         '5': { name: '豪哥一家', limit: 2 }
     };
 
-    // --- 雪花動畫 (保持不變) ---
+    // --- 雪花動畫的 JavaScript (保持不變) ---
     document.addEventListener('DOMContentLoaded', () => {
         const snowContainer = document.getElementById('snow-container');
-        if (snowContainer) {
+        if (snowContainer) { // 增加一個檢查，避免在沒有雪花容器的頁面出錯
             const snowflakeCount = 100;
             for (let i = 0; i < snowflakeCount; i++) {
                 const snowflake = document.createElement('div');
@@ -278,12 +277,9 @@
                 throw new Error(result.message || '提交失敗，請稍後再試。');
             }
 
-            showMessage(result.message, 'success');
-            // 如果是更新願望，不清空表單，方便再次修改
-            if (result.message.includes('提交成功')) {
-                form.reset();
-            }
-            updateStatus();
+            showMessage('提交成功！感謝您的參與，聖誕快樂！', 'success');
+            form.reset();
+            updateStatus(); // 提交成功後，再次更新狀態
         } catch (error) {
             showMessage(`錯誤: ${error.message}`);
         } finally {
@@ -299,32 +295,42 @@
             
             const result = await response.json();
 
+            // 需求 1: 只要總人數滿了，就關閉表單
             if (result.count >= 8) {
                 statusText.textContent = '所有人都已完成填寫，請靜候主辦方執行抽籤！';
-                form.style.display = 'none';
+                form.style.display = 'none'; // 隱藏表單
+                messageArea.style.display = 'none'; // 同時隱藏可能存在的舊訊息
+                // 確保在滿員時顯示一個清晰的提示
                 showMessage('感謝所有人的參與，目前名額已全數額滿！', 'success');
-                return;
+                return; // 直接結束函式，不再執行後續操作
             } else {
+                // 如果人數不滿，確保表單是可見的
                 form.style.display = 'block';
             }
 
-            const groupStatus = result.groupStatus || {};
+            // 需求 2: 更新下拉選單中的各組狀態
+            const groupStatus = result.groupStatus || {}; // 從 API 取得各組人數
 
+            // 遍歷下拉選單的每一個選項
             Array.from(groupSelect.options).forEach(option => {
                 const groupId = option.value;
-                if (groupId && GROUP_CONFIG[groupId]) {
+                if (groupId && GROUP_CONFIG[groupId]) { // 排除第一個 "--請選擇--" 選項
                     const config = GROUP_CONFIG[groupId];
-                    const currentCount = groupStatus[groupId] || 0;
+                    const currentCount = groupStatus[groupId] || 0; // 目前人數，如果沒有就是 0
                     
+                    // 更新選項文字
                     option.textContent = `${config.name} (${currentCount}/${config.limit})`;
 
-                    // --- 【核心修改】我們不再禁用選項 ---
-                    // 舊邏輯 (已移除): if (currentCount >= config.limit) { option.disabled = true; }
-                    // 現在無論如何都保持選項為可選狀態
-                    option.disabled = false; 
+                    // 如果該組人數已滿，就禁用該選項
+                    if (currentCount >= config.limit) {
+                        option.disabled = true;
+                    } else {
+                        option.disabled = false;
+                    }
                 }
             });
 
+            // 更新總人數狀態文字
             statusText.textContent = `已填寫人數: ${result.count} / 8`;
 
         } catch (error) {
@@ -332,6 +338,7 @@
         }
     }
 
+    // 頁面載入時，立即執行一次狀態更新
     document.addEventListener('DOMContentLoaded', updateStatus);
 </script>
 </body>
