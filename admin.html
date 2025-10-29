@@ -238,6 +238,8 @@
             return response;
         }
 
+        // 在 admin.html 的 <script> 標籤中，找到 loadStatus 函式並替換
+
         async function loadStatus() {
             const groupMap = { 1: '光佑', 2: 'Jefferson', 3: 'PJ一家', 4: '瑞君一家', 5: '豪哥一家' };
             try {
@@ -248,16 +250,20 @@
                 loginSection.style.display = 'none';
                 adminPanel.style.display = 'block';
                 messageArea.innerHTML = '';
-
+        
                 statusText.textContent = `人數: ${data.count} / 8`;
                 
-                let html = '<table><tr><th>ID</th><th>名字</th><th>組別</th><th onclick="toggleWishes(document.querySelector(\'.controls button\'))" style="cursor:pointer;">許願內容 👁️</th><th>抽到誰(ID)</th><th>操作</th></tr>';
+                // --- 【核心修改】在這裡新增 "Email" 欄位 ---
+                let html = '<table><tr><th>ID</th><th>名字</th><th>Email</th><th>組別</th><th onclick="toggleWishes(document.querySelector(\'.controls button\'))" style="cursor:pointer;">許願內容 👁️</th><th>抽到誰(ID)</th><th>操作</th></tr>';
+                
                 const participants = data.participants || [];
-
+        
                 participants.forEach(p => {
+                    // --- 【核心修改】在這裡新增 p.email 的 <td> ---
                     html += `<tr>
                         <td>${p.id}</td>
                         <td>${p.name}</td>
+                        <td>${p.email}</td> 
                         <td>${groupMap[p.group_id] || '未知'}</td>
                         <td class="wish-content hidden">${p.wish}</td>
                         <td>${p.assigned_to || 'N/A'}</td>
@@ -266,8 +272,8 @@
                 });
                 html += '</table>';
                 participantsTable.innerHTML = html;
-
-                // 更新按鈕狀態
+        
+                // 更新按鈕狀態 (這部分邏輯不變)
                 const canDraw = data.count === 8 && !data.draw_completed;
                 const canSend = data.draw_completed && !data.emails_sent;
                 drawButton.disabled = !canDraw;
@@ -277,7 +283,7 @@
                 else drawButton.textContent = '執行抽籤';
                 if (data.emails_sent) sendButton.textContent = '已寄信';
                 else sendButton.textContent = '寄送通知信';
-
+        
             } catch (error) { alert(error.message); adminSecret = ''; }
         }
 
