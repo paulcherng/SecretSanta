@@ -9,6 +9,7 @@
         th, td { border: 1px solid #ddd; padding: 8px; text-align: left; word-break: break-all; }
         th { background-color: #f2f2f2; }
         button { cursor: pointer; padding: 5px 10px; margin: 0 5px; }
+        .controls button { padding: 8px 15px; margin: 10px 5px 10px 0; }
         .delete-btn { background-color: #f8d7da; border-color: #f5c6cb; }
         .danger-zone { border: 2px solid #c12a2a; padding: 15px; margin-top: 30px; border-radius: 5px; }
         .danger-zone button { background-color: #c12a2a; color: white; }
@@ -16,6 +17,8 @@
         .message { padding: 10px; margin-top: 15px; border-radius: 5px; }
         .message.success { background-color: #d4edda; color: #155724; }
         .message.error { background-color: #f8d7da; color: #721c24; }
+        /* 需求 2: 隱藏願望的樣式 */
+        .wish-content.hidden { color: transparent; text-shadow: 0 0 8px rgba(0,0,0,0.5); user-select: none; cursor: pointer; }
     </style>
 </head>
 <body>
@@ -31,14 +34,15 @@
         <h2>目前參與者列表</h2>
         <p id="status-text"></p>
         <div id="participants-table"></div>
-        <br>
-        <button id="draw-button" onclick="startDraw()">執行抽籤</button>
-        <button onclick="loadStatus()">重新整理</button>
-
+        <div class="controls">
+            <button onclick="toggleWishes(this)">顯示願望</button>
+            <button id="draw-button" onclick="startDraw()">執行抽籤</button>
+            <button id="send-button" onclick="sendEmails()">寄送通知信</button>
+            <button onclick="loadStatus()">重新整理</button>
+        </div>
         <div class="danger-zone">
             <h3>危險操作區</h3>
-            <p>此操作無法復原，請謹慎使用。</p>
-            <button onclick="resetSystem()">重置整個系統 (清空所有資料)</button>
+            <button onclick="resetSystem()">重置整個系統</button>
         </div>
     </div>
 
@@ -49,6 +53,7 @@
         const statusText = document.getElementById('status-text');
         const participantsTable = document.getElementById('participants-table');
         const drawButton = document.getElementById('draw-button');
+        const sendButton = document.getElementById('send-button');
         let adminSecret = '';
 
         function showMessage(text, type = 'error') {
@@ -62,11 +67,7 @@
         }
 
         async function apiFetch(url, options = {}) {
-            const headers = {
-                'Content-Type': 'application/json',
-                ...options.headers,
-                'Authorization': `Bearer ${adminSecret}`
-            };
+            const headers = { 'Content-Type': 'application/json', ...options.headers, 'Authorization': `Bearer ${adminSecret}` };
             const response = await fetch(url, { ...options, headers });
             if (response.status === 401) { throw new Error('密碼錯誤或憑證已過期。'); }
             return response;
@@ -85,93 +86,109 @@
 
                 statusText.textContent = `人數: ${data.count} / 8`;
                 
-                let html = '<table><tr><th>ID</th><th>名字</th><th>組別</th><th>許願內容</th><th>抽到誰(ID)</th><th>操作</th></tr>';
-                const participants = data.participants;
+                let html = '<table><tr><th>ID</th><th>名字</th><th>組別</th><th onclick="toggleWishes(document.querySelector(\'.controls button\'))" style="cursor:pointer;">許願內容 👁️</th><th>抽到誰(ID)</th><th>操作</th></tr>';
+                const participants = data.participants || [];
 
                 participants.forEach(p => {
                     html += `<tr>
                         <td>${p.id}</td>
                         <td>${p.name}</td>
                         <td>${groupMap[p.group_id] || '未知'}</td>
-                        <td>${p.wish}</td>
+                        <td class="wish-content hidden">${p.wish}</td>
                         <td>${p.assigned_to || 'N/A'}</td>
-                        <td>
-                            <button class="delete-btn" onclick="deleteParticipant(${p.id}, '${p.name}')" ${data.draw_completed ? 'disabled' : ''}>
-                                刪除
-                            </button>
-                        </td>
+                        <td><button class="delete-btn" onclick="deleteParticipant(${p.id}, '${p.name}')" ${data.draw_completed ? 'disabled' : ''}>刪除</button></td>
                     </tr>`;
                 });
                 html += '</table>';
                 participantsTable.innerHTML = html;
 
-                if (data.draw_completed) {
-                    drawButton.disabled = true;
-                    drawButton.textContent = '抽籤已完成';
-                } else {
-                    drawButton.disabled = data.count < 8;
-                    drawButton.textContent = data.count < 8 ? '人數未滿' : '執行抽籤';
-                }
-            } catch (error) {
-                alert(error.message);
-                adminSecret = '';
-            }
-        }
-
-        async function startDraw() { /* ... (此函式保持不變) ... */ }
-
-        // --- 新增的函式 ---
-        async function deleteParticipant(userId, userName) {
-            if (!confirm(`您確定要刪除「${userName}」(ID: ${userId}) 的資料嗎？\n此動作將讓他們可以重新填寫。`)) return;
-
-            try {
-                const response = await apiFetch('/api/delete-user', {
-                    method: 'POST',
-                    body: JSON.stringify({ userId: userId })
-                });
-                const result = await response.json();
-                if (!response.ok) throw new Error(result.message);
+                // 更新按鈕狀態
+                const canDraw = data.count === 8 && !data.draw_completed;
+                const canSend = data.draw_completed && !data.emails_sent;
+                drawButton.disabled = !canDraw;
+                sendButton.disabled = !canSend;
                 
-                showMessage(result.message, 'success');
-                loadStatus(); // 重新載入列表
-            } catch (error) {
-                showMessage(error.message, 'error');
-            }
+                if (data.draw_completed) drawButton.textContent = '已抽籤';
+                else drawButton.textContent = '執行抽籤';
+                if (data.emails_sent) sendButton.textContent = '已寄信';
+                else sendButton.textContent = '寄送通知信';
+
+            } catch (error) { alert(error.message); adminSecret = ''; }
         }
 
-        // --- 新增的函式 ---
-        async function resetSystem() {
-            if (!confirm('！！！警告！！！\n您確定要清空所有參與者的資料嗎？\n此操作無法復原，將會把系統恢復到初始狀態！')) return;
-
-            try {
-                const response = await apiFetch('/api/reset', { method: 'POST' });
-                const result = await response.json();
-                if (!response.ok) throw new Error(result.message);
-
-                showMessage(result.message, 'success');
-                loadStatus(); // 重新載入，此時列表應為空
-            } catch (error) {
-                showMessage(error.message, 'error');
-            }
+        // 需求 2: 顯示/隱藏願望
+        function toggleWishes(button) {
+            const wishes = document.querySelectorAll('.wish-content');
+            const isHidden = wishes[0]?.classList.contains('hidden');
+            wishes.forEach(w => w.classList.toggle('hidden'));
+            button.textContent = isHidden ? '隱藏願望' : '顯示願望';
         }
 
-        // 保持不變的 startDraw 函式
         async function startDraw() {
-            if (!confirm('確定要執行抽籤嗎？此動作無法復原！')) return;
+            if (!confirm('確定要執行抽籤嗎？此動作將儲存配對結果。')) return;
             drawButton.disabled = true;
-            drawButton.textContent = '抽籤與寄信中...';
             try {
                 const response = await apiFetch('/api/draw', { method: 'POST' });
                 const result = await response.json();
                 if (!response.ok) throw new Error(result.message);
                 showMessage(result.message, 'success');
                 loadStatus();
-            } catch (error) {
-                showMessage(error.message, 'error');
-                drawButton.disabled = false;
-                drawButton.textContent = '執行抽籤';
-            }
+            } catch (error) { showMessage(error.message, 'error'); loadStatus(); }
+        }
+        
+        // 需求 4: 帶有金額提示的寄信功能
+        async function sendEmails() {
+            const giftAmount = prompt("請輸入禮物金額範圍 (例如：$500-$700元)", "$500 - $700 元");
+            if (!giftAmount) return; // 如果使用者取消輸入
+
+            sendButton.disabled = true;
+            showMessage('正在準備寄送所有信件，請稍候...', 'info');
+            try {
+                const response = await apiFetch('/api/send-emails', {
+                    method: 'POST',
+                    body: JSON.stringify({ giftAmount: giftAmount })
+                });
+                const result = await response.json();
+                if (!response.ok) throw new Error(result.message);
+                showMessage(result.message, 'success');
+                loadStatus();
+            } catch (error) { showMessage(error.message, 'error'); loadStatus(); }
+        }
+
+        // 其他函式 (deleteParticipant, resetSystem) 保持不變
+        async function deleteParticipant(userId, userName) {
+            if (!confirm(`您確定要刪除「${userName}」的資料嗎？`)) return;
+            try {
+                const response = await apiFetch('/api/delete-user', { method: 'POST', body: JSON.stringify({ userId }) });
+                const result = await response.json();
+                if (!response.ok) throw new Error(result.message);
+                showMessage(result.message, 'success'); loadStatus();
+            } catch (error) { showMessage(error.message, 'error'); }
+        }
+        async function resetSystem() {
+            if (!confirm('！！！警告！！！\n您確定要清空所有資料嗎？此操作無法復原！')) return;
+            try {
+                const response = await apiFetch('/api/reset', { method: 'POST' });
+                const result = await response.json();
+                if (!response.ok) throw new Error(result.message);
+                showMessage(result.message, 'success'); loadStatus();
+            } catch (error) { showMessage(error.message, 'error'); }
         }
     </script>
 </body>
-</html>
+</html>```
+
+---
+
+### 如何實施
+
+1.  **修改檔案**：
+    *   用新版程式碼**覆蓋** `api/submit.js`。
+    *   用新版程式碼**覆蓋** `api/draw.js`。
+    *   用新版程式碼**覆蓋** `admin.html`。
+2.  **建立新檔案**：
+    *   在 `api` 資料夾中，**建立** `api/send-emails.js` 並貼上對應的程式碼。
+3.  **重新部署**：
+    *   將所有修改（2個修改過的檔案 + 1個新檔案）上傳到 GitHub，讓 Vercel 進行部署。
+
+部署完成後，您的抽籤系統就擁有了全部新功能！
