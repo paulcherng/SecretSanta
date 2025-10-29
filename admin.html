@@ -4,10 +4,14 @@
     <meta charset="UTF-8">
     <title>抽籤後台</title>
     <style>
-        body { font-family: sans-serif; max-width: 800px; margin: 40px auto; padding: 0 20px; }
+        body { font-family: sans-serif; max-width: 1000px; margin: 40px auto; padding: 0 20px; }
         table { width: 100%; border-collapse: collapse; margin-top: 15px; }
-        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; word-break: break-all; }
         th { background-color: #f2f2f2; }
+        button { cursor: pointer; padding: 5px 10px; margin: 0 5px; }
+        .delete-btn { background-color: #f8d7da; border-color: #f5c6cb; }
+        .danger-zone { border: 2px solid #c12a2a; padding: 15px; margin-top: 30px; border-radius: 5px; }
+        .danger-zone button { background-color: #c12a2a; color: white; }
         button:disabled { background-color: #ccc; cursor: not-allowed; }
         .message { padding: 10px; margin-top: 15px; border-radius: 5px; }
         .message.success { background-color: #d4edda; color: #155724; }
@@ -30,6 +34,12 @@
         <br>
         <button id="draw-button" onclick="startDraw()">執行抽籤</button>
         <button onclick="loadStatus()">重新整理</button>
+
+        <div class="danger-zone">
+            <h3>危險操作區</h3>
+            <p>此操作無法復原，請謹慎使用。</p>
+            <button onclick="resetSystem()">重置整個系統 (清空所有資料)</button>
+        </div>
     </div>
 
     <script>
@@ -47,10 +57,7 @@
 
         function login() {
             adminSecret = document.getElementById('secret').value;
-            if (!adminSecret) {
-                alert('請輸入密碼');
-                return;
-            }
+            if (!adminSecret) { alert('請輸入密碼'); return; }
             loadStatus();
         }
 
@@ -58,27 +65,15 @@
             const headers = {
                 'Content-Type': 'application/json',
                 ...options.headers,
-                'Authorization': `Bearer ${adminSecret}` // 將密碼放在 Header
+                'Authorization': `Bearer ${adminSecret}`
             };
             const response = await fetch(url, { ...options, headers });
-            if (response.status === 401) {
-                throw new Error('密碼錯誤或憑證已過期。');
-            }
+            if (response.status === 401) { throw new Error('密碼錯誤或憑證已過期。'); }
             return response;
         }
 
-        // 在 admin.html 的 <script> 標籤中，找到 loadStatus 函式並整個替換掉
-
         async function loadStatus() {
-            // 建立一個 組別ID -> 組別名稱 的對照表
-            const groupMap = {
-                1: '光佑',
-                2: 'Jefferson',
-                3: 'PJ一家',
-                4: '瑞君一家',
-                5: '豪哥一家'
-            };
-        
+            const groupMap = { 1: '光佑', 2: 'Jefferson', 3: 'PJ一家', 4: '瑞君一家', 5: '豪哥一家' };
             try {
                 const response = await apiFetch('/api/status');
                 if (!response.ok) throw new Error('無法載入資料');
@@ -87,41 +82,35 @@
                 loginSection.style.display = 'none';
                 adminPanel.style.display = 'block';
                 messageArea.innerHTML = '';
-        
+
                 statusText.textContent = `人數: ${data.count} / 8`;
                 
-                // 建立新的表格標頭
-                let html = '<table><tr><th>ID</th><th>名字</th><th>Email</th><th>組別</th><th>許願內容</th><th>抽到誰(ID)</th><th>對方的願望</th></tr>';
-                
+                let html = '<table><tr><th>ID</th><th>名字</th><th>組別</th><th>許願內容</th><th>抽到誰(ID)</th><th>操作</th></tr>';
                 const participants = data.participants;
-        
+
                 participants.forEach(p => {
-                    // 查找抽到的對象
-                    const target = p.assigned_to ? participants.find(targetPerson => targetPerson.id === p.assigned_to) : null;
-                    
                     html += `<tr>
                         <td>${p.id}</td>
                         <td>${p.name}</td>
-                        <td>${p.email}</td>
                         <td>${groupMap[p.group_id] || '未知'}</td>
-                        <td style="max-width: 200px; word-wrap: break-word;">${p.wish}</td>
+                        <td>${p.wish}</td>
                         <td>${p.assigned_to || 'N/A'}</td>
-                        <td style="max-width: 200px; word-wrap: break-word;">${target ? target.wish : 'N/A'}</td>
+                        <td>
+                            <button class="delete-btn" onclick="deleteParticipant(${p.id}, '${p.name}')" ${data.draw_completed ? 'disabled' : ''}>
+                                刪除
+                            </button>
+                        </td>
                     </tr>`;
                 });
                 html += '</table>';
                 participantsTable.innerHTML = html;
-        
+
                 if (data.draw_completed) {
                     drawButton.disabled = true;
                     drawButton.textContent = '抽籤已完成';
-                    showMessage('抽籤已完成。結果如上表所示。', 'success');
-                } else if (data.count < 8) {
-                    drawButton.disabled = true;
-                    drawButton.textContent = '人數未滿';
                 } else {
-                    drawButton.disabled = false;
-                    drawButton.textContent = '執行抽籤';
+                    drawButton.disabled = data.count < 8;
+                    drawButton.textContent = data.count < 8 ? '人數未滿' : '執行抽籤';
                 }
             } catch (error) {
                 alert(error.message);
@@ -129,21 +118,54 @@
             }
         }
 
-        async function startDraw() {
-            if (!confirm('確定要執行抽籤嗎？此動作無法復原！')) return;
-            
-            drawButton.disabled = true;
-            drawButton.textContent = '抽籤與寄信中...';
-            showMessage('正在執行中，請勿關閉視窗...', 'info');
+        async function startDraw() { /* ... (此函式保持不變) ... */ }
+
+        // --- 新增的函式 ---
+        async function deleteParticipant(userId, userName) {
+            if (!confirm(`您確定要刪除「${userName}」(ID: ${userId}) 的資料嗎？\n此動作將讓他們可以重新填寫。`)) return;
 
             try {
-                const response = await apiFetch('/api/draw', { method: 'POST' });
+                const response = await apiFetch('/api/delete-user', {
+                    method: 'POST',
+                    body: JSON.stringify({ userId: userId })
+                });
                 const result = await response.json();
+                if (!response.ok) throw new Error(result.message);
+                
+                showMessage(result.message, 'success');
+                loadStatus(); // 重新載入列表
+            } catch (error) {
+                showMessage(error.message, 'error');
+            }
+        }
 
+        // --- 新增的函式 ---
+        async function resetSystem() {
+            if (!confirm('！！！警告！！！\n您確定要清空所有參與者的資料嗎？\n此操作無法復原，將會把系統恢復到初始狀態！')) return;
+
+            try {
+                const response = await apiFetch('/api/reset', { method: 'POST' });
+                const result = await response.json();
                 if (!response.ok) throw new Error(result.message);
 
                 showMessage(result.message, 'success');
-                loadStatus(); // 重新載入以顯示結果
+                loadStatus(); // 重新載入，此時列表應為空
+            } catch (error) {
+                showMessage(error.message, 'error');
+            }
+        }
+
+        // 保持不變的 startDraw 函式
+        async function startDraw() {
+            if (!confirm('確定要執行抽籤嗎？此動作無法復原！')) return;
+            drawButton.disabled = true;
+            drawButton.textContent = '抽籤與寄信中...';
+            try {
+                const response = await apiFetch('/api/draw', { method: 'POST' });
+                const result = await response.json();
+                if (!response.ok) throw new Error(result.message);
+                showMessage(result.message, 'success');
+                loadStatus();
             } catch (error) {
                 showMessage(error.message, 'error');
                 drawButton.disabled = false;
